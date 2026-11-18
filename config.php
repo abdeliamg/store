@@ -26,6 +26,21 @@ function cookie_opts(int $expires): array {
     ];
 }
 
+// Security headers sent from PHP (OpenLiteSpeed ignores `Header` directives in .htaccess).
+// Scripts that need a different policy (e.g. api/file.php) simply call header() again to replace them.
+if (PHP_SAPI !== 'cli' && !headers_sent()) {
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()');
+    header('Cross-Origin-Opener-Policy: same-origin');
+    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://code.jquery.com https://cdn.datatables.net https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.datatables.net https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+    if (is_https_request()) {
+        header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+    }
+    header_remove('X-Powered-By');
+}
+
 // Session configuration
 ini_set('session.cookie_httponly', '1');
 ini_set('session.cookie_samesite', 'Lax');

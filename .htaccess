@@ -120,8 +120,17 @@ RewriteRule ^telegram/(bot|handlers)\.php$ - [F,L]
 # Routing
 # ============================================
 
-# Allow direct access to API, telegram webhook, assets, uploads
-RewriteRule ^(api|telegram|assets|uploads)/ - [L]
+# Uploads (duplicated from uploads/.htaccess so it also works on OpenLiteSpeed,
+# which only honours RewriteRules and may not load sub-directory .htaccess files):
+#  - private folders are served only via the auth-checked api/file.php
+#  - anything that is not a real image type is refused (blocks .php, .html, .svg ...)
+RewriteRule ^uploads/(kyc|proofs|fields|deliveries|stock)/([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){0,3})$ api/file.php?d=$1&f=$2 [L]
+RewriteRule ^uploads/(kyc|proofs|fields|deliveries|stock)(/|$) - [F,L]
+RewriteRule ^uploads/(?!.+\.(?:jpe?g|png|gif|webp)$) - [F,L]
+RewriteRule ^uploads/.+\.(?:jpe?g|png|gif|webp)$ - [L]
+
+# Allow direct access to API, telegram webhook, assets
+RewriteRule ^(api|telegram|assets)/ - [L]
 
 # Allow direct access to setup.php
 RewriteRule ^setup\.php$ - [L]

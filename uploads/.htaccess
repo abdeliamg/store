@@ -22,7 +22,7 @@ RewriteEngine On
 
 # Private folders (KYC IDs, payment proofs, order field images, delivered goods,
 # stock) are served ONLY through the auth-checked script api/file.php.
-RewriteRule ^(kyc|proofs|fields|deliveries|stock)/([A-Za-z0-9_-]+(?:\.[A-Za-z0-9]{1,5})?)$ /api/file.php?d=$1&f=$2 [L]
+RewriteRule ^(kyc|proofs|fields|deliveries|stock)/([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){0,3})$ /api/file.php?d=$1&f=$2 [L]
 RewriteRule ^(kyc|proofs|fields|deliveries|stock)(/|$) - [F,L]
 
 # Public folders: only real image types may be served directly.

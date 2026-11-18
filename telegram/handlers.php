@@ -195,6 +195,11 @@ function handle_callback_query(array $callback): void {
                 $order = $s->fetch();
                 if (!$order || !in_array($order['status'], ['pending', 'delivering'], true)) return null;
 
+                // Never refund while the supplier API call is in flight (customer could get both)
+                $q = $db->prepare("SELECT status FROM api_queue WHERE order_id=?");
+                $q->execute([$id]);
+                if ($q->fetchColumn() === 'processing') return 'processing';
+
                 $u = $db->prepare("UPDATE orders SET status='canceled_by_admin', resolved_at=datetime('now') WHERE id=? AND status IN ('pending','delivering')");
                 $u->execute([$id]);
                 if ($u->rowCount() !== 1) return null;
@@ -206,6 +211,10 @@ function handle_callback_query(array $callback): void {
                 $db->prepare("DELETE FROM api_queue WHERE order_id=? AND status != 'processing'")->execute([$id]);
                 return $order;
             });
+            if ($order === 'processing') {
+                telegram_answer_callback($callbackId, '⏳ الطلب قيد المعالجة التلقائية (API) حالياً، لا يمكن إلغاؤه الآن');
+                return;
+            }
             if (!$order) {
                 telegram_answer_callback($callbackId, BOT_MSG_ALREADY);
                 return;

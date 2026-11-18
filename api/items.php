@@ -10,7 +10,8 @@ class ItemInputError extends RuntimeException {}
 switch ($action) {
     case 'get':
         $id = intval($_GET['id'] ?? 0);
-        $viewer = auth_user();
+        // Fresh (uncached) role check: the admin branch exposes supplier api_url values.
+        $viewer = auth_user_fresh();
         $isAdmin = $viewer && ($viewer['role'] ?? '') === 'admin';
 
         if ($isAdmin) {

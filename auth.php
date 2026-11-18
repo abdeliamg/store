@@ -133,7 +133,7 @@ function auth_register(string $username, string $email, string $password, string
  * Login Step 1 — Validate credentials only (does NOT set session)
  * Returns user row + requires_2fa flag
  */
-function auth_login_step1(string $username, string $password): array {
+function auth_login_step1(string $username, string $password, ?callable $onFailure = null): array {
     $db = DB::get();
 
     $stmt = $db->prepare("SELECT * FROM users WHERE username = ? OR email = ?");
@@ -143,9 +143,11 @@ function auth_login_step1(string $username, string $password): array {
     if (!$user) {
         // Equalize timing so response time does not reveal whether the account exists
         password_verify($password, AUTH_DUMMY_HASH);
+        if ($onFailure) $onFailure();
         json_error('اسم المستخدم أو كلمة المرور غير صحيحة');
     }
     if (!password_verify($password, $user['password_hash'])) {
+        if ($onFailure) $onFailure();
         json_error('اسم المستخدم أو كلمة المرور غير صحيحة');
     }
 
@@ -272,6 +274,7 @@ function auth_user(): ?array {
     if (empty($_SESSION['user_id'])) return null;
     // Use session cache (shared with require_auth) to avoid DB hit on every page load
     if (!empty($_SESSION['_auth_cache']) && ($_SESSION['_auth_cache_ts'] ?? 0) > time() - 30
+        && !empty($_SESSION['pw_fp'])
         && (int)($_SESSION['_auth_cache']['id'] ?? 0) === (int)$_SESSION['user_id']) {
         $cached = $_SESSION['_auth_cache'];
         return [
@@ -286,13 +289,23 @@ function auth_user(): ?array {
         ];
     }
     $db = DB::get();
-    $stmt = $db->prepare("SELECT " . AUTH_USER_COLUMNS . " FROM users WHERE id = ?");
+    $stmt = $db->prepare("SELECT " . AUTH_USER_COLUMNS . ", password_hash FROM users WHERE id = ?");
     $stmt->execute([$_SESSION['user_id']]);
     $user = $stmt->fetch() ?: null;
-    if ($user) {
-        $_SESSION['_auth_cache'] = $user;
-        $_SESSION['_auth_cache_ts'] = time();
+    if (!$user) return null;
+
+    // Same session rules as require_auth(): banned users and sessions not bound to the
+    // current password (changed elsewhere, or created before binding existed) are logged out.
+    $fp = $user['id'] . ':' . password_fingerprint((string)$user['password_hash']);
+    unset($user['password_hash']);
+    $sessFp = (string)($_SESSION['pw_fp'] ?? '');
+    if (!$user['is_active'] || $sessFp === '' || !hash_equals($sessFp, $fp)) {
+        unset($_SESSION['user_id'], $_SESSION['user_role'], $_SESSION['pw_fp'], $_SESSION['_auth_cache'], $_SESSION['_auth_cache_ts'], $_SESSION['2fa_verified']);
+        return null;
     }
+
+    $_SESSION['_auth_cache'] = $user;
+    $_SESSION['_auth_cache_ts'] = time();
     return $user;
 }
 

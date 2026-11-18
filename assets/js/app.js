@@ -165,6 +165,11 @@ window.compressFormDataImages = async function (fd) {
         // Server may rotate the CSRF token (e.g. after login/logout session regeneration)
         if (data && typeof data.csrf === 'string' && data.csrf) APP.csrf = data.csrf;
         else if (data && typeof data.csrf_token === 'string' && data.csrf_token) APP.csrf = data.csrf_token;
+        // Stale CSRF token (session expired while the tab was open): retry once with the fresh token
+        if (res.status === 403 && data && data.csrf_retry && !opts._csrfRetried) {
+            const { headers: _h, ...rest } = opts;
+            return api(url, { ...rest, headers: { ...(opts.headers || {}), 'X-CSRF-TOKEN': APP.csrf }, _csrfRetried: true });
+        }
         if (!res.ok || data.success === false) {
             throw new Error(data.error || 'حدث خطأ غير متوقع');
         }
@@ -2334,6 +2339,7 @@ window.compressFormDataImages = async function (fd) {
                             ? `<div class="alert alert-success" style="margin-bottom:1rem;">✅ التحقق بخطوتين مفعّل</div>
                                <form id="disable2faForm">
                                    <div class="form-group"><label class="form-label">كلمة المرور لإلغاء التفعيل</label><input type="password" class="form-input" name="password" required></div>
+                                   <div class="form-group"><label class="form-label">رمز التحقق من تطبيق المصادقة</label><input type="text" class="form-input" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></div>
                                    <button type="submit" class="btn btn-danger btn-block">إلغاء التحقق بخطوتين</button>
                                </form>`
                             : `<p style="color:var(--text-secondary);margin-bottom:1rem;font-size:0.9rem;">قم بتفعيل التحقق بخطوتين لحماية إضافية لحسابك</p>
@@ -2458,9 +2464,11 @@ window.compressFormDataImages = async function (fd) {
             if (disable2faForm) {
                 disable2faForm.addEventListener('submit', async (e) => {
                     e.preventDefault();
-                    const password = new FormData(e.target).get('password');
+                    const fdDis = new FormData(e.target);
+                    const password = fdDis.get('password');
+                    const code = String(fdDis.get('code') || '').trim();
                     try {
-                        await api('/api/profile.php?action=disable_2fa', { method: 'POST', body: { password } });
+                        await api('/api/profile.php?action=disable_2fa', { method: 'POST', body: { password, code } });
                         showToast('تم إلغاء التحقق بخطوتين');
                         renderProfile();
                     } catch (err) { showToast(err.message, 'error'); }

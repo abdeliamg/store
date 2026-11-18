@@ -34,7 +34,11 @@ switch ($action) {
             if (in_array($row['key'], SETTINGS_HIDDEN_KEYS, true)) continue;
             $settings[$row['key']] = $row['value'];
         }
-        json_success(['settings' => $settings]);
+        json_success([
+            'settings' => $settings,
+            // The webhook rejects every update until a secret exists ("Set webhook" must be pressed once)
+            'webhook_secret_missing' => DB::setting('telegram_webhook_secret') === '' && DB::setting('telegram_bot_token') !== '',
+        ]);
         break;
 
     case 'update':

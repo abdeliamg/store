@@ -1106,6 +1106,7 @@
                     <h3 style="font-weight:600;margin-bottom:1rem;">🤖 تيليجرام</h3>
                     <div class="form-group"><label class="form-label">توكن البوت</label><input type="text" class="form-input" name="telegram_bot_token" value="${esc(s.telegram_bot_token || '')}"></div>
                     <div class="form-group"><label class="form-label">معرّف محادثة المشرف (Chat ID)</label><input type="text" class="form-input" name="telegram_admin_chat_id" value="${esc(s.telegram_admin_chat_id || '')}"></div>
+                    ${data.webhook_secret_missing ? `<div style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.75rem;font-size:0.85rem;">⚠️ بوت تيليجرام متوقف حالياً: اضغط "تعيين الويب هوك" مرة واحدة لتفعيل الحماية الجديدة (يجب أن يبدأ الرابط بـ https://).</div>` : ''}
                     <button type="button" class="btn btn-outline btn-sm" id="setWebhookBtn">🔗 تعيين الويب هوك</button>
                 </div>
             </div>

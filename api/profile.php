@@ -189,9 +189,10 @@ switch ($action) {
             json_error('كلمة المرور غير صحيحة');
         }
 
-        // If the client supplies a TOTP code, it must be valid and unused
+        // Disabling 2FA requires the second factor too (a stolen session + password is not enough)
         $code = trim(profile_field($data, 'code'));
-        if ($code !== '' && !empty($row['totp_secret'])) {
+        if (!empty($row['totp_secret'])) {
+            if ($code === '') json_error('رمز التحقق من تطبيق المصادقة مطلوب');
             if (!totp_check_and_consume((int)$user['id'], $row['totp_secret'], $code)) {
                 json_error('رمز التحقق غير صحيح');
             }

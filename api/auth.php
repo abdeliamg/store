@@ -30,12 +30,25 @@ switch ($action) {
             json_error('اسم المستخدم أو كلمة المرور غير صحيحة');
         }
 
-        $userBucket = 'login_user:' . mb_strtolower($username, 'UTF-8');
+        // Only FAILED attempts count toward per-account limits, so nobody can lock a user
+        // (e.g. the admin) out just by sending requests:
+        //  - per account + IP: 8 failures / 15 min   (stops a single attacker)
+        //  - per account, any IP: 100 failures / hour (slows distributed guessing)
+        //  - per IP, any account: 30 attempts / hour  (stops spraying)
+        $name = mb_strtolower($username, 'UTF-8');
+        $failIpBucket = 'login_fail:' . $name . '|' . client_ip();
+        $failUserBucket = 'login_fail_user:' . $name;
         rate_limit('login_ip:' . client_ip(), 30, 3600);
-        rate_limit($userBucket, 8, 900);
+        if (rate_limit_count($failIpBucket, 900) >= 8 || rate_limit_count($failUserBucket, 3600) >= 100) {
+            header('Retry-After: 900');
+            json_error('محاولات كثيرة جداً، يرجى المحاولة لاحقاً', 429);
+        }
 
-        $result = auth_login_step1($username, $password);
-        rate_limit_clear($userBucket);
+        $result = auth_login_step1($username, $password, function () use ($failIpBucket, $failUserBucket) {
+            rate_limit_hit($failIpBucket, 900);
+            rate_limit_hit($failUserBucket, 3600);
+        });
+        rate_limit_clear($failIpBucket);
 
         if ($result['requires_2fa']) {
             // Store pending user for 2FA verification

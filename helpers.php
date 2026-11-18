@@ -47,7 +47,8 @@ function require_auth(): array {
         json_error('غير مصرح', 401);
     }
     // Cache user in session for 30 seconds to avoid DB hit on every request
-    if (!empty($_SESSION['_auth_cache']) && ($_SESSION['_auth_cache_ts'] ?? 0) > time() - 30) {
+    if (!empty($_SESSION['_auth_cache']) && ($_SESSION['_auth_cache_ts'] ?? 0) > time() - 30
+        && !empty($_SESSION['pw_fp']) && (int)($_SESSION['_auth_cache']['id'] ?? 0) === (int)$_SESSION['user_id']) {
         return $_SESSION['_auth_cache'];
     }
     $db = DB::get();
@@ -62,11 +63,10 @@ function require_auth(): array {
     // Sessions are bound to the password: changing it (or an admin reset) logs out every other session.
     $fp = $user['id'] . ':' . password_fingerprint((string)$user['password_hash']);
     unset($user['password_hash']);
+    // Every login path binds pw_fp (bind_session_to_password). A session without a matching
+    // binding predates this check or belongs to another account — force a fresh login.
     $sessFp = (string)($_SESSION['pw_fp'] ?? '');
-    if ($sessFp === '' || strpos($sessFp, $user['id'] . ':') !== 0) {
-        // First check for this login (or a different account in this session) — bind it now.
-        $_SESSION['pw_fp'] = $fp;
-    } elseif (!hash_equals($sessFp, $fp)) {
+    if ($sessFp === '' || !hash_equals($sessFp, $fp)) {
         $_SESSION = [];
         if (session_status() === PHP_SESSION_ACTIVE) session_destroy();
         json_error('انتهت الجلسة، يرجى تسجيل الدخول مجدداً', 401);
@@ -330,6 +330,15 @@ function rate_limit_hit(string $bucket, int $windowSeconds): int {
     });
 }
 
+/** Current hit count of a bucket within its window, without recording a hit. */
+function rate_limit_count(string $bucket, int $windowSeconds): int {
+    $stmt = DB::get()->prepare("SELECT hits, window_start FROM rate_limits WHERE bucket = ?");
+    $stmt->execute([hash('sha256', $bucket)]);
+    $row = $stmt->fetch();
+    if (!$row || (time() - (int)$row['window_start']) >= $windowSeconds) return 0;
+    return (int)$row['hits'];
+}
+
 /** Clear a rate-limit bucket (e.g. after successful login). */
 function rate_limit_clear(string $bucket): void {
     DB::get()->prepare("DELETE FROM rate_limits WHERE bucket = ?")->execute([hash('sha256', $bucket)]);
@@ -417,7 +426,14 @@ function require_csrf(): void {
     // Every method that is not a safe read must carry a valid token.
     if (!in_array(request_method(), ['GET', 'HEAD', 'OPTIONS'], true)) {
         if (!csrf_verify()) {
-            json_error('رمز الأمان غير صالح', 403);
+            // Hand back the session's current token so the SPA can retry once (e.g. the tab
+            // outlived its session). Other origins cannot read this response, so this is safe.
+            json_response([
+                'success'    => false,
+                'error'      => 'رمز الأمان غير صالح، يرجى المحاولة مجدداً',
+                'csrf'       => csrf_token(),
+                'csrf_retry' => true,
+            ], 403);
         }
     }
 }
