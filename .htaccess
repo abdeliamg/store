@@ -1,0 +1,133 @@
+# BEGIN db-protect
+RewriteEngine On
+RewriteRule \.(db|db-wal|db-shm|db-journal|sqlite|sqlite3|sql|bak|old|swp|env|log|lock|md)$ - [F,L]
+# END db-protect
+
+# No directory listings anywhere
+Options -Indexes
+
+# Deny dotfiles (.db_version, .git, .env, .htaccess ...) — .well-known stays reachable
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Deny include-only PHP files (they must never be requested directly).
+# NOTE: FilesMatch matches the basename in any folder, so "auth" is NOT listed
+# here (api/auth.php is the public login API); root auth.php is blocked below.
+<FilesMatch "^(config|db|helpers|totp|bot|handlers)\.php$">
+    Require all denied
+</FilesMatch>
+
+RewriteEngine On
+RewriteBase /
+
+# ============================================
+# HTTPS Redirect (301 Permanent)
+# ============================================
+RewriteCond %{HTTPS} !on
+RewriteCond %{HTTP:X-Forwarded-Proto} !https
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+# ============================================
+# Security Headers
+# ============================================
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set X-XSS-Protection "0"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+    Header always set Cross-Origin-Opener-Policy "same-origin"
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://code.jquery.com https://cdn.datatables.net https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.datatables.net https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    Header always unset X-Powered-By
+</IfModule>
+
+# ============================================
+# Gzip Compression
+# ============================================
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css
+    AddOutputFilterByType DEFLATE application/javascript application/json
+    AddOutputFilterByType DEFLATE image/svg+xml application/xml text/xml
+    AddOutputFilterByType DEFLATE application/x-font-ttf application/font-woff
+</IfModule>
+
+# ============================================
+# Browser Caching
+# ============================================
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresDefault "access plus 1 day"
+    ExpiresByType text/css "access plus 1 day"
+    ExpiresByType application/javascript "access plus 1 day"
+    ExpiresByType image/jpeg "access plus 6 months"
+    ExpiresByType image/png "access plus 6 months"
+    ExpiresByType image/gif "access plus 6 months"
+    ExpiresByType image/webp "access plus 6 months"
+    ExpiresByType image/svg+xml "access plus 6 months"
+    ExpiresByType image/x-icon "access plus 1 year"
+    ExpiresByType font/woff2 "access plus 1 year"
+    ExpiresByType font/woff "access plus 1 year"
+    ExpiresByType application/font-woff2 "access plus 1 year"
+    ExpiresByType application/font-woff "access plus 1 year"
+    ExpiresByType application/x-font-ttf "access plus 1 year"
+    ExpiresByType text/html "access plus 0 seconds"
+    ExpiresByType application/json "access plus 0 seconds"
+</IfModule>
+
+# Cache-Control for static assets
+<IfModule mod_headers.c>
+    <FilesMatch "\.(css|js)$">
+        Header set Cache-Control "public, max-age=86400, must-revalidate"
+    </FilesMatch>
+    <FilesMatch "\.(jpg|jpeg|png|gif|webp|svg|ico)$">
+        Header set Cache-Control "public, max-age=15552000, immutable"
+    </FilesMatch>
+    <FilesMatch "\.(woff2|woff|ttf|eot)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+    <FilesMatch "\.php$">
+        Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        Header set Pragma "no-cache"
+    </FilesMatch>
+</IfModule>
+
+# ============================================
+# LiteSpeed Cache
+# ============================================
+<IfModule LiteSpeed>
+    CacheLookup on
+    # Exclude PHP from LiteSpeed cache (CSRF tokens are session-bound)
+    <FilesMatch "\.php$">
+        CacheControl no-cache
+    </FilesMatch>
+</IfModule>
+
+# ============================================
+# File Protection
+# ============================================
+
+# Block access to database, logs, locks, and version files
+RewriteRule \.(db|db-wal|db-shm|db-journal|sqlite|log|lock)$ - [F,L]
+RewriteRule (^|/)\.(?!well-known/) - [F,L]
+
+# Block access to include-only PHP files
+RewriteRule ^(config|db|auth|helpers|totp)\.php$ - [F,L]
+RewriteRule ^telegram/(bot|handlers)\.php$ - [F,L]
+
+# ============================================
+# Routing
+# ============================================
+
+# Allow direct access to API, telegram webhook, assets, uploads
+RewriteRule ^(api|telegram|assets|uploads)/ - [L]
+
+# Allow direct access to setup.php
+RewriteRule ^setup\.php$ - [L]
+
+# Route everything else through index.php (SPA)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php [L,QSA]
+

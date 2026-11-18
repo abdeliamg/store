@@ -1,0 +1,29 @@
+# --- Never commit data or secrets ---
+# SQLite database (users, password hashes, bot/supplier tokens, KYC records)
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+.db_version
+
+# User uploads (KYC ID documents, payment proofs, delivered goods, product images)
+/uploads/**
+!/uploads/
+!/uploads/.htaccess
+
+# Logs and backups
+*.log
+*.bak
+*.old
+*.swp
+backups/
+
+# Local environment / editor files
+.env
+.env.*
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

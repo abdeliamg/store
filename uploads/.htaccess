@@ -1,0 +1,35 @@
+# ============================================================
+# CStore — uploads/ hardening
+# ============================================================
+
+# No directory listings, no CGI
+Options -Indexes -ExecCGI
+
+# Never execute or serve server-side scripts from uploads (defense in depth)
+<FilesMatch "(?i)\.(php\d*|phtml|phps|phar|pht|phpt|inc|pl|py|cgi|sh|shtml|asp|aspx|jsp|htaccess|htpasswd|ini)$">
+    Require all denied
+</FilesMatch>
+RemoveHandler .php .phtml .phar .pht
+RemoveType .php .phtml .phar .pht
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag engine off
+</IfModule>
+
+RewriteEngine On
+
+# Private folders (KYC IDs, payment proofs, order field images, delivered goods,
+# stock) are served ONLY through the auth-checked script api/file.php.
+RewriteRule ^(kyc|proofs|fields|deliveries|stock)/([A-Za-z0-9_-]+(?:\.[A-Za-z0-9]{1,5})?)$ /api/file.php?d=$1&f=$2 [L]
+RewriteRule ^(kyc|proofs|fields|deliveries|stock)(/|$) - [F,L]
+
+# Public folders: only real image types may be served directly.
+RewriteRule !\.(?:jpe?g|png|gif|webp)$ - [F,L]
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Content-Security-Policy "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox"
+    Header always set Cross-Origin-Resource-Policy "same-origin"
+</IfModule>
